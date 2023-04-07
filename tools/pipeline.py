@@ -178,7 +178,7 @@ class Pipeline(object):
                     idx[i,j] = -1
 
         
-        fig = make_subplots(rows = self.in_ncluster,cols = self.out_ncluster,shared_xaxes=True, shared_yaxes=True, subplot_titles = np.arange(self.out_ncluster).astype(str))
+        fig = make_subplots(rows = self.in_ncluster,cols = self.out_ncluster,shared_xaxes='all', shared_yaxes='all', x_title = "time (s)", subplot_titles = [f'<b>{i}</b>' for i in  np.arange(self.out_ncluster)], horizontal_spacing=0.02, vertical_spacing=0.02)
 
         for i in range(self.in_ncluster): 
             for j in range(self.out_ncluster): 
@@ -198,6 +198,17 @@ class Pipeline(object):
                         col =j+1
                     )
 
+
+        for i, color in enumerate(in_colors):
+            fig['layout'][f'yaxis{self.in_ncluster*i+1}']['title'] = f'<b>{chr(65+i)}</b>'
+            fig['layout'][f'yaxis{self.in_ncluster*i+1}']['title']['font'] = dict(size =40,color = color)
+        for i,color in enumerate(out_colors):
+            fig['layout']['annotations'][i]['font'] = dict(size =40,color = color)
+        fig.update_layout(
+                hovermode = 'closest',
+                width = self.out_ncluster*200+100,
+                height = self.in_ncluster*150+100,
+            )
         fig.update_layout(
             showlegend = False
         )
