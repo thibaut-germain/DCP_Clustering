@@ -1,7 +1,9 @@
 import numpy as np 
+import pandas as pd
 import plotly.graph_objects as go 
 from  plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
+import json
 
 from tools.segmentation import PhaseSeg
 from tools.preprocessing import ZNormalization
@@ -63,6 +65,7 @@ class Pipeline(object):
         
         #inhalation
         pred = []
+        json_pred = []
         zn = ZNormalization()
         for phs in self.seg_lst:
             #inhalation
@@ -84,8 +87,14 @@ class Pipeline(object):
             out_labels = np.where(in_labels == -1, -1, out_labels)
             labels = np.vstack((in_labels,out_labels)).T
             pred.append(labels)
-        
+
+            #append json pred. 
+            tdata = np.vstack([phs.insp_start_[:-1],in_labels,phs.exp_start_,out_labels]).T
+            tdf = pd.DataFrame(tdata,columns=["in_start_index","in_cluster", "out_start_index", "out_cluster"])
+            json_pred.append(tdf.to_json())
+
         self.predictions_ = np.array(pred,dtype=object)
+        self.json_predictions_ = json.dumps(json_pred)
 
         return self
 
@@ -214,9 +223,53 @@ class Pipeline(object):
         )
         
         return fig
+    
+    
+    def get_centroid_representer_(self): 
 
+        X_in = self._get_training_set(kind='inhalation', processed=False)
+        X_out = self._get_training_set(kind='exhalation',processed=False)
+        n_samples = X_in.shape[0]
 
+        #get colors
+        in_labels = self.in_kdtw_.labels_
+        out_labels = self.out_kdtw_.labels_
+        in_distances = self.in_kdtw_.distances_[np.arange(n_samples),self.in_kdtw_.labels_]
+        out_distances = self.out_kdtw_.distances_[np.arange(n_samples),self.out_kdtw_.labels_]
+        distance = np.sqrt(in_distances**2+out_distances**2)
 
-
+        idx = np.zeros((self.in_ncluster,self.out_ncluster),dtype=int)
+        for i in range(self.in_ncluster): 
+            for j in range(self.out_ncluster): 
+                try:
+                    mask, = np.where((in_labels == i)&(out_labels==j))
+                    t_idx = np.argmin(distance[mask])
+                    idx[i,j] = mask[t_idx]
+                except:
+                    idx[i,j] = -1
+        dct = {}
+        json_dct = {}
+        for i in range(self.in_ncluster): 
+            for j in range(self.out_ncluster): 
+                if idx[i,j] !=  -1:
+                    ts_in = X_in[idx[i,j]]
+                    ts_out = X_out[idx[i,j]]
+                    dct[f"{i}-{j}"] = [ts_in,ts_out]
+                    json_dct[f"{i}-{j}"] = [ts_in.tolist(),ts_out.tolist()]
         
+        self.centroid_representer_ = dct
+        self.json_centroid_representer = json.dumps(json_dct)
+
+        return self.centroid_representer_
+
+    
+    @property
+    def get_json_experiment_(self): 
+        exp = dict()
+        exp["prediction"] = self.json_predictions_
+        exp["in_centroid"] = json.dumps(self.in_kdtw_.centroid_.tolist())
+        exp["out_centroid"] = json.dumps(self.out_kdtw_.centroid_.tolist())
+        self.get_centroid_representer_()
+        exp["representer"] = self.json_centroid_representer
+        return json.dumps(exp)
 
